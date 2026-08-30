@@ -1,5 +1,6 @@
 // ============================================================
-// SYMMETRY 2026 — QR PARTICIPANT VERIFICATION
+// SYMMETRY 2026
+// QR PARTICIPANT VERIFICATION SYSTEM
 // ============================================================
 
 
@@ -8,7 +9,7 @@
 // ============================================================
 
 import { initializeApp } from
-    "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+    "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 
 import {
     getFirestore,
@@ -17,67 +18,71 @@ import {
     where,
     getDocs
 } from
-    "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+    "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 
 
 // ============================================================
 // FIREBASE CONFIGURATION
 // ============================================================
 //
-// IMPORTANT:
-// Replace the values below with your actual Firebase config.
+// Replace these values with the configuration from:
 //
+// Firebase Console
+// → Project Settings
+// → Your Apps
+// → Web App
+//
+// IMPORTANT:
 // Do NOT put a Firebase service-account private key here.
 //
 
 const firebaseConfig = {
-
-    apiKey: "YOUR_API_KEY",
-
-    authDomain:
-        "YOUR_PROJECT_ID.firebaseapp.com",
-
-    projectId:
-        "YOUR_PROJECT_ID",
-
-    storageBucket:
-        "YOUR_PROJECT_ID.firebasestorage.app",
-
-    messagingSenderId:
-        "YOUR_MESSAGING_SENDER_ID",
-
-    appId:
-        "YOUR_APP_ID",
-
-    measurementId:
-        "YOUR_MEASUREMENT_ID"
+  apiKey: "AIzaSyAiq2xnBHR5oRvRgTxVCuA1J2aJYS7nwrM",
+  authDomain: "symmetry-annual-fest.firebaseapp.com",
+  projectId: "symmetry-annual-fest",
+  storageBucket: "symmetry-annual-fest.firebasestorage.app",
+  messagingSenderId: "854008910944",
+  appId: "1:854008910944:web:cf20ff04a22831cb6b5f05",
+  measurementId: "G-FEDPP8GWRR"
 };
+
 
 
 // ============================================================
 // INITIALIZE FIREBASE
 // ============================================================
 
-const app = initializeApp(firebaseConfig);
+const app =
+    initializeApp(firebaseConfig);
 
 
 // ============================================================
 // CONNECT TO FIRESTORE
 // ============================================================
 //
-// Your screenshot shows that your Firestore database is named
-// "symmetry", so we explicitly connect to that database.
+// Your Firestore database is named:
+//
+// symmetry
+//
+// Therefore we explicitly specify it here.
 //
 
-const db = getFirestore(app, "symmetry");
+const db =
+    getFirestore(
+        app,
+        "symmetry"
+    );
 
 
 // ============================================================
-// FIRESTORE COLLECTION
+// PARTICIPANT COLLECTION
 // ============================================================
 
 const participantCollection =
-    collection(db, "participant_list");
+    collection(
+        db,
+        "participant_list"
+    );
 
 
 // ============================================================
@@ -85,19 +90,29 @@ const participantCollection =
 // ============================================================
 
 const reader =
-    document.getElementById("reader");
+    document.getElementById(
+        "reader"
+    );
 
 const resultSection =
-    document.getElementById("result-section");
+    document.getElementById(
+        "result-section"
+    );
 
 const resultCard =
-    document.getElementById("result-card");
+    document.getElementById(
+        "result-card"
+    );
 
 const scannerStatus =
-    document.getElementById("scanner-status");
+    document.getElementById(
+        "scanner-status"
+    );
 
 const scanAgainButton =
-    document.getElementById("scan-again");
+    document.getElementById(
+        "scan-again"
+    );
 
 
 // ============================================================
@@ -112,16 +127,21 @@ let processingScan = false;
 
 
 // ============================================================
-// HTML ESCAPE FUNCTION
+// HTML ESCAPE
 // ============================================================
 //
-// Prevents Firebase data from being interpreted as HTML.
+// Protects the page from HTML contained in Firebase data.
 //
 
 function escapeHTML(value) {
 
-    if (value === null || value === undefined) {
+    if (
+        value === null ||
+        value === undefined
+    ) {
+
         return "";
+
     }
 
     return String(value)
@@ -139,10 +159,57 @@ function escapeHTML(value) {
 
 
 // ============================================================
-// GET REGISTRATION ID FROM QR
+// CONVERT FIREBASE VALUE TO BOOLEAN
 // ============================================================
 //
-// Supported QR formats:
+// This handles values such as:
+//
+// true
+// false
+// "true"
+// "false"
+// 1
+// 0
+//
+// This makes event checking more robust.
+//
+
+function isTrue(value) {
+
+    if (value === true) {
+
+        return true;
+
+    }
+
+
+    if (value === 1) {
+
+        return true;
+
+    }
+
+
+    if (
+        typeof value === "string" &&
+        value.toLowerCase() === "true"
+    ) {
+
+        return true;
+
+    }
+
+
+    return false;
+
+}
+
+
+// ============================================================
+// EXTRACT REGISTRATION ID FROM QR
+// ============================================================
+//
+// Supported:
 //
 // 1. SYM26-MTGA6XXS
 //
@@ -152,19 +219,23 @@ function escapeHTML(value) {
 //
 // ============================================================
 
-function extractRegistrationId(decodedText) {
+function extractRegistrationId(
+    decodedText
+) {
 
     if (!decodedText) {
+
         return null;
+
     }
+
 
     decodedText =
         decodedText.trim();
 
 
     // --------------------------------------------------------
-    // FORMAT 1
-    // Plain registration ID
+    // PLAIN REGISTRATION ID
     // --------------------------------------------------------
 
     if (
@@ -179,14 +250,15 @@ function extractRegistrationId(decodedText) {
 
 
     // --------------------------------------------------------
-    // FORMAT 2
-    // JSON
+    // JSON QR
     // --------------------------------------------------------
 
     try {
 
         const data =
-            JSON.parse(decodedText);
+            JSON.parse(
+                decodedText
+            );
 
 
         if (
@@ -202,20 +274,20 @@ function extractRegistrationId(decodedText) {
 
     } catch (error) {
 
-        // Not JSON — continue
-
+        // Not JSON
     }
 
 
     // --------------------------------------------------------
-    // FORMAT 3
-    // URL
+    // URL QR
     // --------------------------------------------------------
 
     try {
 
         const url =
-            new URL(decodedText);
+            new URL(
+                decodedText
+            );
 
 
         const registrationId =
@@ -232,18 +304,13 @@ function extractRegistrationId(decodedText) {
 
     } catch (error) {
 
-        // Not a URL — continue
-
+        // Not a URL
     }
 
 
     // --------------------------------------------------------
     // FALLBACK
     // --------------------------------------------------------
-    //
-    // If the QR contains something other than the formats
-    // above, treat the entire QR content as the ID.
-    //
 
     return decodedText;
 
@@ -254,10 +321,16 @@ function extractRegistrationId(decodedText) {
 // FIND PARTICIPANT IN FIRESTORE
 // ============================================================
 
-async function findParticipant(registrationId) {
+async function findParticipant(
+    registrationId
+) {
 
     console.log(
-        "Searching Firebase for:",
+        "Searching Firestore..."
+    );
+
+    console.log(
+        "Registration ID:",
         registrationId
     );
 
@@ -282,11 +355,19 @@ async function findParticipant(registrationId) {
         );
 
 
+    console.log(
+        "Documents found:",
+        snapshot.size
+    );
+
+
     // --------------------------------------------------------
-    // PARTICIPANT NOT FOUND
+    // NO MATCH
     // --------------------------------------------------------
 
-    if (snapshot.empty) {
+    if (
+        snapshot.empty
+    ) {
 
         return null;
 
@@ -294,7 +375,7 @@ async function findParticipant(registrationId) {
 
 
     // --------------------------------------------------------
-    // GET FIRST MATCH
+    // FIRST MATCH
     // --------------------------------------------------------
 
     const document =
@@ -320,7 +401,11 @@ async function findParticipant(registrationId) {
 async function stopScanner() {
 
     if (!scanner) {
+
+        scanning = false;
+
         return;
+
     }
 
 
@@ -335,7 +420,7 @@ async function stopScanner() {
     } catch (error) {
 
         console.log(
-            "Scanner stop error:",
+            "Scanner stop:",
             error
         );
 
@@ -349,7 +434,7 @@ async function stopScanner() {
     } catch (error) {
 
         console.log(
-            "Scanner clear error:",
+            "Scanner clear:",
             error
         );
 
@@ -370,21 +455,29 @@ async function stopScanner() {
 async function startScanner() {
 
     console.log(
-        "Starting QR scanner..."
+        "================================="
+    );
+
+    console.log(
+        "STARTING QR SCANNER"
+    );
+
+    console.log(
+        "================================="
     );
 
 
     // --------------------------------------------------------
-    // RESET STATE
+    // RESET
     // --------------------------------------------------------
-
-    processingScan = false;
 
     scanning = false;
 
+    processingScan = false;
+
 
     // --------------------------------------------------------
-    // HIDE PREVIOUS RESULT
+    // HIDE OLD RESULT
     // --------------------------------------------------------
 
     resultSection.classList.add(
@@ -400,18 +493,18 @@ async function startScanner() {
 
 
     scannerStatus.textContent =
-        "Requesting camera access...";
+        "Starting camera...";
 
 
     // --------------------------------------------------------
-    // STOP EXISTING SCANNER
+    // STOP PREVIOUS SCANNER
     // --------------------------------------------------------
 
     await stopScanner();
 
 
     // --------------------------------------------------------
-    // CAMERA SUPPORT CHECK
+    // CHECK CAMERA API
     // --------------------------------------------------------
 
     if (
@@ -422,14 +515,12 @@ async function startScanner() {
         scannerStatus.innerHTML = `
 
             <strong>
-                Camera is not available.
+                Camera API unavailable.
             </strong>
 
             <br><br>
 
-            Please open this website using
-            <strong>HTTPS</strong> or
-            <strong>localhost</strong>.
+            Please use HTTPS and a modern browser.
 
         `;
 
@@ -452,85 +543,95 @@ async function startScanner() {
     } catch (error) {
 
         console.error(
-            "Scanner creation error:",
+            "Scanner creation failed:",
             error
         );
 
 
-        scannerStatus.textContent =
-            "Unable to initialize QR scanner.";
+        scannerStatus.innerHTML = `
+
+            <strong>
+                QR scanner could not be initialized.
+            </strong>
+
+        `;
 
         return;
 
     }
 
 
-    // --------------------------------------------------------
-    // SCANNER CONFIG
-    // --------------------------------------------------------
+    // ========================================================
+    // SCANNER CONFIGURATION
+    // ========================================================
 
     const scannerConfig = {
 
         fps: 10,
 
-        qrbox:
-            function (
-                viewfinderWidth,
-                viewfinderHeight
-            ) {
 
-                const minEdge =
-                    Math.min(
-                        viewfinderWidth,
-                        viewfinderHeight
-                    );
+        qrbox: function (
+            viewfinderWidth,
+            viewfinderHeight
+        ) {
 
-
-                const boxSize =
-                    Math.floor(
-                        minEdge * 0.70
-                    );
+            const minEdge =
+                Math.min(
+                    viewfinderWidth,
+                    viewfinderHeight
+                );
 
 
-                return {
+            const size =
+                Math.floor(
+                    minEdge * 0.70
+                );
 
-                    width:
-                        boxSize,
 
-                    height:
-                        boxSize
+            return {
 
-                };
+                width: size,
 
-            },
+                height: size
+
+            };
+
+        },
+
 
         aspectRatio: 1.0
 
     };
 
 
-    // --------------------------------------------------------
-    // CAMERA CONFIGURATION
-    // --------------------------------------------------------
-
-    const cameraConfig = {
-
-        facingMode: {
-            ideal: "environment"
-        }
-
-    };
-
-
-    // --------------------------------------------------------
-    // START CAMERA
-    // --------------------------------------------------------
+    // ========================================================
+    // METHOD 1
+    // REAR CAMERA
+    // ========================================================
+    //
+    // IMPORTANT:
+    // `exact` is used here instead of `ideal`.
+    //
+    // This fixes the error you encountered:
+    //
+    // "'facingMode' should be string or object with exact as key"
+    //
+    // ========================================================
 
     try {
 
+        console.log(
+            "Trying rear camera..."
+        );
+
+
         await scanner.start(
 
-            cameraConfig,
+            {
+                facingMode: {
+                    exact: "environment"
+                }
+            },
 
             scannerConfig,
 
@@ -549,14 +650,128 @@ async function startScanner() {
 
 
         console.log(
-            "Camera started successfully."
+            "Rear camera started successfully."
+        );
+
+
+        return;
+
+    } catch (error) {
+
+        console.warn(
+            "Rear camera failed:",
+            error
+        );
+
+    }
+
+
+    // ========================================================
+    // METHOD 2
+    // FALLBACK CAMERA
+    // ========================================================
+
+    try {
+
+        console.log(
+            "Trying available cameras..."
+        );
+
+
+        const cameras =
+            await Html5Qrcode.getCameras();
+
+
+        console.log(
+            "Available cameras:",
+            cameras
+        );
+
+
+        if (
+            !cameras ||
+            cameras.length === 0
+        ) {
+
+            throw new Error(
+                "No cameras detected."
+            );
+
+        }
+
+
+        // ----------------------------------------------------
+        // DEFAULT CAMERA
+        // ----------------------------------------------------
+
+        let selectedCamera =
+            cameras[0];
+
+
+        // ----------------------------------------------------
+        // SEARCH FOR REAR CAMERA
+        // ----------------------------------------------------
+
+        const rearCamera =
+            cameras.find(
+                camera => {
+
+                    return /back|rear|environment/i
+                        .test(
+                            camera.label
+                        );
+
+                }
+            );
+
+
+        if (rearCamera) {
+
+            selectedCamera =
+                rearCamera;
+
+        }
+
+
+        console.log(
+            "Selected camera:",
+            selectedCamera
+        );
+
+
+        // ----------------------------------------------------
+        // START SELECTED CAMERA
+        // ----------------------------------------------------
+
+        await scanner.start(
+
+            selectedCamera.id,
+
+            scannerConfig,
+
+            onScanSuccess,
+
+            onScanError
+
+        );
+
+
+        scanning = true;
+
+
+        scannerStatus.textContent =
+            "Camera ready — scan the participant QR code";
+
+
+        console.log(
+            "Fallback camera started successfully."
         );
 
 
     } catch (error) {
 
         console.error(
-            "Camera start error:",
+            "All camera attempts failed:",
             error
         );
 
@@ -564,13 +779,13 @@ async function startScanner() {
         scanning = false;
 
 
+        // ----------------------------------------------------
+        // DETERMINE ERROR
+        // ----------------------------------------------------
+
         let message =
-            "Unable to access the camera.";
+            "Unable to open camera.";
 
-
-        // ----------------------------------------------------
-        // ERROR TYPES
-        // ----------------------------------------------------
 
         if (
             error.name ===
@@ -611,23 +826,25 @@ async function startScanner() {
         ) {
 
             message =
-                "Camera access was blocked by the browser.";
+                "The browser blocked camera access.";
 
         }
 
 
+        // ----------------------------------------------------
+        // DISPLAY ERROR
+        // ----------------------------------------------------
+
         scannerStatus.innerHTML = `
 
             <strong>
-                ${message}
+                ${escapeHTML(message)}
             </strong>
 
             <br><br>
 
-            Make sure camera permission is allowed
-            and open this website through
-            <strong>HTTPS</strong> or
-            <strong>localhost</strong>.
+            Please allow camera access
+            and reload the page.
 
         `;
 
@@ -646,7 +863,7 @@ async function onScanSuccess(
 ) {
 
     // --------------------------------------------------------
-    // PREVENT MULTIPLE SCANS
+    // PREVENT DUPLICATE PROCESSING
     // --------------------------------------------------------
 
     if (
@@ -663,8 +880,20 @@ async function onScanSuccess(
 
 
     console.log(
-        "QR detected:",
+        "================================="
+    );
+
+    console.log(
+        "QR CODE DETECTED"
+    );
+
+    console.log(
+        "Raw QR:",
         decodedText
+    );
+
+    console.log(
+        "================================="
     );
 
 
@@ -689,10 +918,20 @@ async function onScanSuccess(
         );
 
 
+    console.log(
+        "Extracted registration ID:",
+        registrationId
+    );
+
+
+    // --------------------------------------------------------
+    // INVALID QR
+    // --------------------------------------------------------
+
     if (!registrationId) {
 
         displayInvalid(
-            "Invalid QR data"
+            "Invalid QR code"
         );
 
         return;
@@ -700,14 +939,8 @@ async function onScanSuccess(
     }
 
 
-    console.log(
-        "Registration ID:",
-        registrationId
-    );
-
-
     // --------------------------------------------------------
-    // FIREBASE LOOKUP
+    // FIRESTORE SEARCH
     // --------------------------------------------------------
 
     try {
@@ -719,10 +952,16 @@ async function onScanSuccess(
 
 
         // ----------------------------------------------------
-        // PARTICIPANT FOUND
+        // FOUND
         // ----------------------------------------------------
 
         if (participant) {
+
+            console.log(
+                "Participant found:",
+                participant
+            );
+
 
             displayParticipant(
                 participant
@@ -732,10 +971,15 @@ async function onScanSuccess(
 
 
         // ----------------------------------------------------
-        // PARTICIPANT NOT FOUND
+        // NOT FOUND
         // ----------------------------------------------------
 
         else {
+
+            console.log(
+                "Participant not found."
+            );
+
 
             displayInvalid(
                 registrationId
@@ -743,17 +987,10 @@ async function onScanSuccess(
 
         }
 
-    }
-
-
-    // --------------------------------------------------------
-    // FIREBASE ERROR
-    // --------------------------------------------------------
-
-    catch (error) {
+    } catch (error) {
 
         console.error(
-            "Firebase error:",
+            "Firestore error:",
             error
         );
 
@@ -771,14 +1008,16 @@ async function onScanSuccess(
 // QR SCAN ERROR
 // ============================================================
 //
-// This fires constantly while the scanner is looking for a QR.
-// Therefore we intentionally do not display errors here.
+// html5-qrcode calls this continuously while searching.
+//
+// Do not display these errors to the user.
 //
 
-function onScanError(errorMessage) {
+function onScanError(
+    errorMessage
+) {
 
-    // Normal scanning noise.
-    // Do not display anything.
+    // Intentionally empty.
 
 }
 
@@ -795,6 +1034,7 @@ function displayParticipant(
         "hidden"
     );
 
+
     scanAgainButton.classList.remove(
         "hidden"
     );
@@ -804,9 +1044,9 @@ function displayParticipant(
         "Participant verified successfully.";
 
 
-    // --------------------------------------------------------
-    // EVENT LIST
-    // --------------------------------------------------------
+    // ========================================================
+    // EVENT DEFINITIONS
+    // ========================================================
 
     const events = [
 
@@ -848,18 +1088,20 @@ function displayParticipant(
     ];
 
 
-    // --------------------------------------------------------
-    // GENERATE EVENT HTML
-    // --------------------------------------------------------
+    // ========================================================
+    // EVENT HTML
+    // ========================================================
 
     const eventHTML =
         events.map(
             event => {
 
                 const active =
-                    participant[
-                        event.field
-                    ] === true;
+                    isTrue(
+                        participant[
+                            event.field
+                        ]
+                    );
 
 
                 return `
@@ -891,13 +1133,16 @@ function displayParticipant(
         ).join("");
 
 
-    // --------------------------------------------------------
+    // ========================================================
     // PARTICIPANT CARD
-    // --------------------------------------------------------
+    // ========================================================
 
     resultCard.innerHTML = `
 
         <div class="result-card">
+
+
+            <!-- HEADER -->
 
             <div class="result-header">
 
@@ -905,11 +1150,13 @@ function displayParticipant(
                     ✓
                 </div>
 
+
                 <div>
 
                     <div class="result-title">
                         Participant Verified
                     </div>
+
 
                     <div class="result-subtitle">
                         Registration found in Firebase
@@ -919,6 +1166,8 @@ function displayParticipant(
 
             </div>
 
+
+            <!-- NAME -->
 
             <div class="participant-name">
 
@@ -930,6 +1179,8 @@ function displayParticipant(
             </div>
 
 
+            <!-- REGISTRATION ID -->
+
             <div class="registration-id">
 
                 ${escapeHTML(
@@ -939,6 +1190,8 @@ function displayParticipant(
 
             </div>
 
+
+            <!-- DETAILS -->
 
             <div class="details">
 
@@ -1071,9 +1324,7 @@ function displayParticipant(
             <div class="events">
 
                 <div class="events-title">
-
                     Registered Events
-
                 </div>
 
 
@@ -1094,7 +1345,7 @@ function displayParticipant(
 
 
 // ============================================================
-// DISPLAY INVALID QR
+// DISPLAY INVALID PARTICIPANT
 // ============================================================
 
 function displayInvalid(
@@ -1104,6 +1355,7 @@ function displayInvalid(
     resultSection.classList.remove(
         "hidden"
     );
+
 
     scanAgainButton.classList.remove(
         "hidden"
@@ -1117,6 +1369,7 @@ function displayInvalid(
     resultCard.innerHTML = `
 
         <div class="error-card">
+
 
             <div class="invalid-icon">
                 ✕
@@ -1143,6 +1396,7 @@ function displayInvalid(
 
             </div>
 
+
         </div>
 
     `;
@@ -1151,7 +1405,7 @@ function displayInvalid(
 
 
 // ============================================================
-// DISPLAY DATABASE ERROR
+// DISPLAY FIREBASE ERROR
 // ============================================================
 
 function displayDatabaseError(
@@ -1162,6 +1416,7 @@ function displayDatabaseError(
         "hidden"
     );
 
+
     scanAgainButton.classList.remove(
         "hidden"
     );
@@ -1171,9 +1426,50 @@ function displayDatabaseError(
         "Unable to verify participant.";
 
 
+    console.error(
+        "Firebase error details:",
+        error
+    );
+
+
+    let errorMessage =
+        "Unable to access the participant database.";
+
+
+    // --------------------------------------------------------
+    // PERMISSION ERROR
+    // --------------------------------------------------------
+
+    if (
+        error.code ===
+        "permission-denied"
+    ) {
+
+        errorMessage =
+            "Firebase denied access to the participant database.";
+
+    }
+
+
+    // --------------------------------------------------------
+    // NETWORK ERROR
+    // --------------------------------------------------------
+
+    else if (
+        error.code ===
+        "unavailable"
+    ) {
+
+        errorMessage =
+            "Firebase is currently unavailable. Check your internet connection.";
+
+    }
+
+
     resultCard.innerHTML = `
 
         <div class="error-card">
+
 
             <div class="invalid-icon">
                 !
@@ -1181,22 +1477,27 @@ function displayDatabaseError(
 
 
             <div class="error-title">
-                Firebase Error
+                Database Error
             </div>
 
 
             <div class="error-message">
 
-                The participant could not be
-                verified.
+                ${escapeHTML(
+                    errorMessage
+                )}
 
                 <br><br>
 
-                Please check your Firebase
-                configuration and Firestore
-                security rules.
+                <small>
+                    ${escapeHTML(
+                        error?.message ||
+                        ""
+                    )}
+                </small>
 
             </div>
+
 
         </div>
 
@@ -1213,6 +1514,11 @@ scanAgainButton.addEventListener(
     "click",
     async function () {
 
+        console.log(
+            "Starting another scan..."
+        );
+
+
         await startScanner();
 
     }
@@ -1224,7 +1530,7 @@ scanAgainButton.addEventListener(
 // ============================================================
 
 console.log(
-    "================================="
+    "========================================"
 );
 
 console.log(
@@ -1232,7 +1538,13 @@ console.log(
 );
 
 console.log(
-    "================================="
+    "========================================"
+);
+
+
+console.log(
+    "Page:",
+    window.location.href
 );
 
 
@@ -1243,17 +1555,28 @@ console.log(
 
 
 console.log(
-    "Camera API:",
+    "MediaDevices available:",
     !!navigator.mediaDevices
 );
 
 
 console.log(
-    "getUserMedia:",
+    "getUserMedia available:",
     !!(
         navigator.mediaDevices &&
         navigator.mediaDevices.getUserMedia
     )
+);
+
+
+console.log(
+    "Html5Qrcode available:",
+    typeof Html5Qrcode !== "undefined"
+);
+
+
+console.log(
+    "========================================"
 );
 
 
