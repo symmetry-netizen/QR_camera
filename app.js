@@ -448,64 +448,29 @@ async function stopScanner() {
 }
 
 
-// ============================================================
-// START SCANNER
-// ============================================================
-
 async function startScanner() {
 
-    console.log(
-        "================================="
-    );
+    console.log("====================================");
+    console.log("STARTING SYMMETRY QR SCANNER");
+    console.log("====================================");
 
-    console.log(
-        "STARTING QR SCANNER"
-    );
-
-    console.log(
-        "================================="
-    );
-
-
-    // --------------------------------------------------------
-    // RESET
-    // --------------------------------------------------------
-
+    // Reset state
     scanning = false;
-
     processingScan = false;
 
-
-    // --------------------------------------------------------
-    // HIDE OLD RESULT
-    // --------------------------------------------------------
-
-    resultSection.classList.add(
-        "hidden"
-    );
-
-    scanAgainButton.classList.add(
-        "hidden"
-    );
-
+    // Hide previous result
+    resultSection.classList.add("hidden");
+    scanAgainButton.classList.add("hidden");
 
     resultCard.innerHTML = "";
 
-
     scannerStatus.textContent =
-        "Starting camera...";
+        "Requesting camera permission...";
 
 
-    // --------------------------------------------------------
-    // STOP PREVIOUS SCANNER
-    // --------------------------------------------------------
-
-    await stopScanner();
-
-
-    // --------------------------------------------------------
+    // ========================================================
     // CHECK CAMERA API
-    // --------------------------------------------------------
+    // ========================================================
 
     if (
         !navigator.mediaDevices ||
@@ -513,14 +478,72 @@ async function startScanner() {
     ) {
 
         scannerStatus.innerHTML = `
+            <strong>Camera API is unavailable.</strong>
+            <br><br>
+            Please use a modern browser over HTTPS.
+        `;
+
+        console.error(
+            "navigator.mediaDevices.getUserMedia unavailable"
+        );
+
+        return;
+    }
+
+
+    // ========================================================
+    // STOP PREVIOUS SCANNER
+    // ========================================================
+
+    await stopScanner();
+
+
+    // ========================================================
+    // REQUEST CAMERA PERMISSION
+    // ========================================================
+    //
+    // IMPORTANT:
+    // We intentionally DO NOT specify facingMode here.
+    // This avoids the error you were getting.
+    //
+
+    let temporaryStream = null;
+
+    try {
+
+        temporaryStream =
+            await navigator.mediaDevices.getUserMedia({
+
+                video: true,
+
+                audio: false
+
+            });
+
+
+        console.log(
+            "Camera permission granted."
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            "Camera permission error:",
+            error
+        );
+
+
+        scannerStatus.innerHTML = `
 
             <strong>
-                Camera API unavailable.
+                Camera permission was denied.
             </strong>
 
             <br><br>
 
-            Please use HTTPS and a modern browser.
+            Please allow camera access for this website
+            and reload the page.
 
         `;
 
@@ -529,21 +552,34 @@ async function startScanner() {
     }
 
 
-    // --------------------------------------------------------
-    // CREATE SCANNER
-    // --------------------------------------------------------
+    // ========================================================
+    // STOP TEMPORARY CAMERA STREAM
+    // ========================================================
+
+    if (temporaryStream) {
+
+        temporaryStream
+            .getTracks()
+            .forEach(
+                track => track.stop()
+            );
+
+    }
+
+
+    // ========================================================
+    // CREATE QR SCANNER
+    // ========================================================
 
     try {
 
         scanner =
-            new Html5Qrcode(
-                "reader"
-            );
+            new Html5Qrcode("reader");
 
     } catch (error) {
 
         console.error(
-            "Scanner creation failed:",
+            "Html5Qrcode initialization error:",
             error
         );
 
@@ -562,7 +598,137 @@ async function startScanner() {
 
 
     // ========================================================
-    // SCANNER CONFIGURATION
+    // GET AVAILABLE CAMERAS
+    // ========================================================
+
+    let cameras;
+
+    try {
+
+        cameras =
+            await Html5Qrcode.getCameras();
+
+    } catch (error) {
+
+        console.error(
+            "Unable to enumerate cameras:",
+            error
+        );
+
+
+        scannerStatus.innerHTML = `
+
+            <strong>
+                Could not detect your camera.
+            </strong>
+
+            <br><br>
+
+            Please check your browser's
+            camera permissions.
+
+        `;
+
+        return;
+
+    }
+
+
+    console.log(
+        "Available cameras:",
+        cameras
+    );
+
+
+    // ========================================================
+    // CHECK CAMERAS
+    // ========================================================
+
+    if (
+        !cameras ||
+        cameras.length === 0
+    ) {
+
+        scannerStatus.innerHTML = `
+
+            <strong>
+                No camera detected.
+            </strong>
+
+            <br><br>
+
+            Please make sure your device
+            has a working camera.
+
+        `;
+
+        return;
+
+    }
+
+
+    // ========================================================
+    // SELECT CAMERA
+    // ========================================================
+
+    let selectedCamera =
+        cameras[0];
+
+
+    console.log(
+        "Default camera:",
+        selectedCamera
+    );
+
+
+    // ========================================================
+    // FIND REAR CAMERA
+    // ========================================================
+    //
+    // On some browsers camera labels are hidden until
+    // permission is granted. Since permission was already
+    // requested above, Safari/Chrome may now expose them.
+    //
+
+    const rearCamera =
+        cameras.find(
+            camera => {
+
+                const label =
+                    camera.label || "";
+
+                return /back|rear|environment/i
+                    .test(label);
+
+            }
+        );
+
+
+    if (rearCamera) {
+
+        selectedCamera =
+            rearCamera;
+
+        console.log(
+            "Rear camera selected:",
+            rearCamera
+        );
+
+    } else {
+
+        console.log(
+            "Rear camera not explicitly identified."
+        );
+
+        console.log(
+            "Using first available camera."
+        );
+
+    }
+
+
+    // ========================================================
+    // QR SCANNER CONFIGURATION
     // ========================================================
 
     const scannerConfig = {
@@ -582,7 +748,7 @@ async function startScanner() {
                 );
 
 
-            const size =
+            const boxSize =
                 Math.floor(
                     minEdge * 0.70
                 );
@@ -590,9 +756,9 @@ async function startScanner() {
 
             return {
 
-                width: size,
+                width: boxSize,
 
-                height: size
+                height: boxSize
 
             };
 
@@ -605,143 +771,27 @@ async function startScanner() {
 
 
     // ========================================================
-    // METHOD 1
-    // REAR CAMERA
+    // START SCANNER USING CAMERA ID
     // ========================================================
     //
     // IMPORTANT:
-    // `exact` is used here instead of `ideal`.
     //
-    // This fixes the error you encountered:
+    // There is NO:
     //
-    // "'facingMode' should be string or object with exact as key"
+    // facingMode
     //
-    // ========================================================
+    // anywhere here.
+    //
+    // We pass the camera ID directly.
+    //
 
     try {
 
         console.log(
-            "Trying rear camera..."
+            "Starting camera:",
+            selectedCamera.id
         );
 
-
-        await scanner.start(
-
-            {
-                facingMode: {
-                    exact: "environment"
-                }
-            },
-
-            scannerConfig,
-
-            onScanSuccess,
-
-            onScanError
-
-        );
-
-
-        scanning = true;
-
-
-        scannerStatus.textContent =
-            "Camera ready — scan the participant QR code";
-
-
-        console.log(
-            "Rear camera started successfully."
-        );
-
-
-        return;
-
-    } catch (error) {
-
-        console.warn(
-            "Rear camera failed:",
-            error
-        );
-
-    }
-
-
-    // ========================================================
-    // METHOD 2
-    // FALLBACK CAMERA
-    // ========================================================
-
-    try {
-
-        console.log(
-            "Trying available cameras..."
-        );
-
-
-        const cameras =
-            await Html5Qrcode.getCameras();
-
-
-        console.log(
-            "Available cameras:",
-            cameras
-        );
-
-
-        if (
-            !cameras ||
-            cameras.length === 0
-        ) {
-
-            throw new Error(
-                "No cameras detected."
-            );
-
-        }
-
-
-        // ----------------------------------------------------
-        // DEFAULT CAMERA
-        // ----------------------------------------------------
-
-        let selectedCamera =
-            cameras[0];
-
-
-        // ----------------------------------------------------
-        // SEARCH FOR REAR CAMERA
-        // ----------------------------------------------------
-
-        const rearCamera =
-            cameras.find(
-                camera => {
-
-                    return /back|rear|environment/i
-                        .test(
-                            camera.label
-                        );
-
-                }
-            );
-
-
-        if (rearCamera) {
-
-            selectedCamera =
-                rearCamera;
-
-        }
-
-
-        console.log(
-            "Selected camera:",
-            selectedCamera
-        );
-
-
-        // ----------------------------------------------------
-        // START SELECTED CAMERA
-        // ----------------------------------------------------
 
         await scanner.start(
 
@@ -764,14 +814,22 @@ async function startScanner() {
 
 
         console.log(
-            "Fallback camera started successfully."
+            "===================================="
+        );
+
+        console.log(
+            "CAMERA STARTED SUCCESSFULLY"
+        );
+
+        console.log(
+            "===================================="
         );
 
 
     } catch (error) {
 
         console.error(
-            "All camera attempts failed:",
+            "Camera start error:",
             error
         );
 
@@ -779,79 +837,29 @@ async function startScanner() {
         scanning = false;
 
 
-        // ----------------------------------------------------
-        // DETERMINE ERROR
-        // ----------------------------------------------------
-
-        let message =
-            "Unable to open camera.";
-
-
-        if (
-            error.name ===
-            "NotAllowedError"
-        ) {
-
-            message =
-                "Camera permission was denied.";
-
-        }
-
-
-        else if (
-            error.name ===
-            "NotFoundError"
-        ) {
-
-            message =
-                "No camera was found on this device.";
-
-        }
-
-
-        else if (
-            error.name ===
-            "NotReadableError"
-        ) {
-
-            message =
-                "The camera is already being used by another application.";
-
-        }
-
-
-        else if (
-            error.name ===
-            "SecurityError"
-        ) {
-
-            message =
-                "The browser blocked camera access.";
-
-        }
-
-
-        // ----------------------------------------------------
-        // DISPLAY ERROR
-        // ----------------------------------------------------
-
         scannerStatus.innerHTML = `
 
             <strong>
-                ${escapeHTML(message)}
+                Camera could not be started.
             </strong>
 
             <br><br>
 
-            Please allow camera access
-            and reload the page.
+            ${escapeHTML(
+                error.message ||
+                "Unknown camera error."
+            )}
+
+            <br><br>
+
+            Please reload the page and
+            allow camera access.
 
         `;
 
     }
 
 }
-
 
 // ============================================================
 // QR SCAN SUCCESS
