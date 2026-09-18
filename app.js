@@ -4,10 +4,13 @@
 // ============================================================
 //
 // Backend: Firebase Firestore.
-// Lookup key: participantID (used as the Firestore document ID,
-// so verification is a single getDoc() instead of a query).
-// Check-in is now performed directly against Firestore here —
-// there is no separate check-in service.
+// Lookup key: registration_id (a FIELD on each participant doc,
+// e.g. "SYM26-MTYM771D") — verification is now a query rather
+// than a direct getDoc() by document ID, since the document ID
+// is no longer assumed to equal the registration_id.
+//
+// Attendance is recorded as a STRING field: attendance = "yes",
+// alongside a checked_in_at server timestamp.
 //
 // ============================================================
 
@@ -16,8 +19,11 @@ import { initializeApp } from
 
 import {
     getFirestore,
-    doc,
-    getDoc,
+    collection,
+    query,
+    where,
+    limit,
+    getDocs,
     updateDoc,
     serverTimestamp
 } from
@@ -81,14 +87,18 @@ function escapeHTML(value) {
 
 
 // ============================================================
-// CONVERT FIREBASE VALUE TO BOOLEAN
+// CONVERT FIREBASE VALUE TO "YES/TRUE"-LIKE STRING OR BOOLEAN
 // ============================================================
+//
+// Used to check whether attendance has already been marked.
+// Accepts "yes" (new format), true/1 (legacy), for safety.
+//
 
-function isTrue(value) {
+function isAttended(value) {
 
     if (value === true || value === 1) return true;
 
-    if (typeof value === "string" && value.toLowerCase() === "true") {
+    if (typeof value === "string" && value.trim().toLowerCase() === "yes") {
         return true;
     }
 
@@ -97,28 +107,29 @@ function isTrue(value) {
 
 
 // ============================================================
-// EXTRACT PARTICIPANT ID FROM QR
+// EXTRACT REGISTRATION ID FROM QR
 // ============================================================
 //
 // Supported:
 //
-// 1. SYM26-MTGA6XXS-ABCDE
+// 1. SYM26-MTYM771D
 //
-// 2. {"participantID":"SYM26-MTGA6XXS-ABCDE", ...}
-//    (the exact JSON produced by registration.js)
+// 2. {"registration_id":"SYM26-MTYM771D", ...}
+//    (or {"participantID":"SYM26-MTYM771D", ...} for backward
+//    compatibility with older registration payloads)
 //
-// 3. https://example.com/?participant_id=SYM26-MTGA6XXS-ABCDE
+// 3. https://example.com/?registration_id=SYM26-MTYM771D
 //
 // ============================================================
 
-function extractParticipantId(decodedText) {
+function extractRegistrationId(decodedText) {
 
     if (!decodedText) return null;
 
     decodedText = decodedText.trim();
 
     // --------------------------------------------------------
-    // PLAIN PARTICIPANT ID
+    // PLAIN REGISTRATION ID
     // --------------------------------------------------------
 
     if (decodedText.toUpperCase().startsWith("SYM26-")) {
@@ -132,6 +143,10 @@ function extractParticipantId(decodedText) {
     try {
 
         const data = JSON.parse(decodedText);
+
+        if (data && data.registration_id) {
+            return String(data.registration_id).trim();
+        }
 
         if (data && data.participantID) {
             return String(data.participantID).trim();
@@ -149,10 +164,11 @@ function extractParticipantId(decodedText) {
 
         const url = new URL(decodedText);
 
-        const participantId =
+        const registrationId =
+            url.searchParams.get("registration_id") ||
             url.searchParams.get("participant_id");
 
-        if (participantId) return participantId.trim();
+        if (registrationId) return registrationId.trim();
 
     } catch (error) {
         // Not a URL
@@ -167,42 +183,49 @@ function extractParticipantId(decodedText) {
 
 
 // ============================================================
-// FIND PARTICIPANT IN FIRESTORE
+// FIND PARTICIPANT IN FIRESTORE (by registration_id field)
 // ============================================================
-//
-// Document ID === participantID, so this is a direct read
-// rather than a query.
-//
 
-async function findParticipant(participantID) {
+async function findParticipant(registrationId) {
 
-    console.log("Looking up participant:", participantID);
+    console.log("Looking up participant with registration_id:", registrationId);
 
-    const participantRef =
-        doc(db, PARTICIPANT_COLLECTION, participantID);
+    const participantsRef = collection(db, PARTICIPANT_COLLECTION);
 
-    const snapshot = await getDoc(participantRef);
+    const participantQuery = query(
+        participantsRef,
+        where("registration_id", "==", registrationId),
+        limit(1)
+    );
 
-    if (!snapshot.exists()) {
+    const snapshot = await getDocs(participantQuery);
+
+    if (snapshot.empty) {
         console.log("No matching participant document.");
         return null;
     }
 
+    const docSnap = snapshot.docs[0];
+
     return {
-        ref: participantRef,
-        ...snapshot.data()
+        ref: docSnap.ref,
+        ...docSnap.data()
     };
 }
 
 
 // ============================================================
-// MARK PARTICIPANT AS CHECKED IN
+// MARK PARTICIPANT ATTENDANCE
 // ============================================================
+//
+// attendance is stored as the string "yes"; checked_in_at
+// remains a server timestamp.
+//
 
-async function markCheckedIn(participantRef) {
+async function markAttendance(participantRef) {
 
     await updateDoc(participantRef, {
-        checked_in: true,
+        attendance: "yes",
         checked_in_at: serverTimestamp()
     });
 }
@@ -386,28 +409,31 @@ async function onScanSuccess(decodedText, decodedResult) {
 
     scannerStatus.textContent = "QR detected — verifying participant...";
 
-    const participantID = extractParticipantId(decodedText);
+    const registrationId = extractRegistrationId(decodedText);
 
-    if (!participantID) {
+    if (!registrationId) {
         displayInvalid("Invalid QR code");
         return;
     }
 
     try {
 
-        const participant = await findParticipant(participantID);
+        const participant = await findParticipant(registrationId);
 
         if (!participant) {
-            displayInvalid(participantID);
+            displayInvalid(registrationId);
             return;
         }
 
-        if (isTrue(participant.checked_in)) {
+        if (isAttended(participant.attendance)) {
             displayAlreadyCheckedIn(participant);
             return;
         }
 
-        await markCheckedIn(participant.ref);
+        await markAttendance(participant.ref);
+
+        // Reflect the update locally without a second read.
+        participant.attendance = "yes";
 
         displayParticipant(participant);
 
@@ -449,7 +475,8 @@ function displayParticipant(participant) {
 
     const eventHTML = events.map(event => {
 
-        const active = isTrue(participant[event.field]);
+        const active = isAttended(participant[event.field]) ||
+            participant[event.field] === true;
 
         return `
             <div class="event ${active ? "event-active" : "event-inactive"}">
@@ -475,7 +502,7 @@ function displayParticipant(participant) {
             </div>
 
             <div class="registration-id">
-                ${escapeHTML(participant.participantID || "")}
+                ${escapeHTML(participant.registration_id || "")}
             </div>
 
             <div class="details">
@@ -548,7 +575,7 @@ function displayAlreadyCheckedIn(participant) {
 // DISPLAY: PARTICIPANT NOT FOUND
 // ============================================================
 
-function displayInvalid(participantID) {
+function displayInvalid(registrationId) {
 
     resultSection.classList.remove("hidden");
     scanAgainButton.classList.remove("hidden");
@@ -562,7 +589,7 @@ function displayInvalid(participantID) {
             <div class="error-message">
                 No registered participant was found for:
                 <br><br>
-                <strong>${escapeHTML(participantID)}</strong>
+                <strong>${escapeHTML(registrationId)}</strong>
             </div>
         </div>
     `;
